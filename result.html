@@ -1,0 +1,435 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script>
+      if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function() {  
+        navigator.serviceWorker.register('/sw.js').then(
+          function(registration) {
+            // Registration was successful
+            console.log('ServiceWorker registration successful with scope: ', registration.scope); },
+          function(err) {
+            // registration failed :(
+            console.log('ServiceWorker registration failed: ', err);
+          });
+      });
+      }
+    </script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="ie=edge">
+
+    <link rel="manifest" href="manifest.json">
+
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="application-name" content="Decoder">
+    <meta name="apple-mobile-web-app-title" content="Decoder">
+    <meta name="msapplication-starturl" content="/">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+
+    <link rel="icon" href="android-icon-192x192.png">
+    <link rel="apple-touch-icon" href="android-icon-192x192.png">
+
+    <link rel="apple-touch-icon" sizes="57x57" href="/apple-icon-57x57.png">
+    <link rel="apple-touch-icon" sizes="60x60" href="/apple-icon-60x60.png">
+    <link rel="apple-touch-icon" sizes="72x72" href="/apple-icon-72x72.png">
+    <link rel="apple-touch-icon" sizes="76x76" href="/apple-icon-76x76.png">
+    <link rel="apple-touch-icon" sizes="114x114" href="/apple-icon-114x114.png">
+    <link rel="apple-touch-icon" sizes="120x120" href="/apple-icon-120x120.png">
+    <link rel="apple-touch-icon" sizes="144x144" href="/apple-icon-144x144.png">
+    <link rel="apple-touch-icon" sizes="152x152" href="/apple-icon-152x152.png">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-icon-180x180.png">
+    <link rel="icon" type="image/png" sizes="192x192"  href="/android-icon-192x192.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="96x96" href="/favicon-96x96.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <meta name="msapplication-TileColor" content="#ffffff">
+    <meta name="msapplication-TileImage" content="/ms-icon-144x144.png">
+    <meta name="theme-color" content="#ffffff">
+    <style type="text/css">
+      .video {
+        left: 0;
+        top: 0;
+        padding: 0;
+        margin: 0;
+      }
+    </style>
+</head>
+<body>
+  <canvas id="image_canvas"  style="position: absolute;width:0px;height:0px;top:0px;"></canvas>
+  <video  id="video"         style="position: absolute;left:0;top:0;">Can't show video sorry...</video>
+  <div    id="square"        style="position: absolute;width:50px;height:50px;border: 2px solid red;"></div>
+  <canvas id="chart"         style="position: absolute;left:0;border: 1px solid rgb(33, 141, 60);"></canvas>
+  <div    id="detector_line" style="position: absolute;left:0px;border: 1px solid red;"></div>
+  <div id="selector_source" style="position: absolute;">
+    <label id="stats_lbl" for="videoSource">Video source: </label><select id="videoSource"></select>
+  </div>
+  <div id="long_div"   style="position: absolute;">
+    <label for="long_lvl" id="long_lbl">Min: </label>
+    <input type="range" min="0" max="2000" value="200" class="slider" id="long_lvl" style="width: 500px;">
+  </div>
+  <textarea id="output" name="story" rows="5" cols="33" style="position: absolute;">
+  </textarea>
+</body>
+  <script>
+    const video = document.getElementById('video');
+    const stats_lbl = document.getElementById('stats_lbl');
+    const selector_source = document.getElementById('selector_source');
+    const chart = document.getElementById('chart');
+    const image_canvas = document.getElementById('image_canvas');
+
+    const image_canvas_context = image_canvas.getContext('2d');
+    
+    var square_rect = square.getBoundingClientRect();
+
+    var cvs = new function()
+    {
+        var step = 10;
+        var canvas = chart;
+        var ctx = canvas.getContext('2d');
+        
+        function line(in_nFromX, in_nFromY, in_nToX, in_nToY, in_fParams)
+        {
+          ctx.beginPath();
+          ctx.moveTo(in_nFromX, canvas.height - in_nFromY);
+          ctx.lineTo(in_nToX, canvas.height - in_nToY);
+          ctx.stroke(); 
+        }
+        
+        function curvedline(in_nFromX, in_nFromY, in_nToX, in_nToY, in_fParams)
+        {
+          ctx.beginPath();
+          ctx.moveTo(in_nFromX, canvas.height - in_nFromY);
+          ctx.quadraticCurveTo(in_nFromX - 10, canvas.height - in_nFromY - 10, in_nToX, canvas.height - in_nToY);
+          ctx.stroke(); 
+        }
+        
+        function axis(in_nFromX, in_nFromY, in_nToX, in_nToY)
+        {
+          ctx.strokeStyle = "#FFFFFF";
+          ctx.setLineDash([11, 3]);
+          ctx.lineDashOffset = 40;
+          ctx.lineWidth = 1;
+
+          var mstep = step * 2
+
+          for(var i = 0; i <= canvas.width / mstep; i++)
+          {
+              line(i * mstep, 0, i * mstep, canvas.height); 
+          }
+        }
+        
+        function text(in_nX, in_nY, in_sText)
+        {
+          ctx.fillText(in_sText, in_nX, canvas.height - in_nY);
+        }
+        
+        function texts()
+        {
+          ctx.textBaseline = "right";
+          ctx.textAlign = "center";
+          ctx.fillStyle = "#949494";
+          ctx.font = "italic 10pt Arial";
+          
+          for(var i = 1; i < canvas.height / step; i++)
+              text(10, i * step,""+(i-1))
+          for(var i = 1; i < canvas.width / step; i++)
+              text( i * step, 5, ""+(i-1))
+        }
+        
+        this.clear = function()
+        {
+          ctx.clearRect(0, 0, canvas.width, canvas.height );
+        }
+        
+        this.lines = function (in_aData)
+        {
+          axis();
+
+          ctx.strokeStyle = "#FF0000";
+          ctx.setLineDash([1,0]);
+          ctx.lineWidth = 2;
+
+          //texts();
+          for(var i = 1; i < in_aData.length; i++)
+              line((i-1)*step, in_aData[i-1],(i)*step, in_aData[i]);          
+        }
+    }
+
+    var m_Max = 255;
+    var m_Min = 0;
+
+    var m_Long = 180;
+
+    var detector_pos = 50;
+    var chart_height = 100;
+    var main_div_width = video.videoWidth;
+    var main_div_height = video.videoHeight;
+
+    function InitElements()
+    {
+      var square_size = square_rect.width;
+
+      main_div_width = video.videoWidth;
+      main_div_height = video.videoHeight;
+
+      square.style.top = ((main_div_height / 2) - square_size / 2)  + 'px';
+      square.style.left = ((main_div_width / 2) - square_size / 2)  + 'px';
+      
+      video.setAttribute('height', main_div_height);
+      video.setAttribute('width', main_div_width);
+
+      output.style.left = (0)  + 'px';
+      output.style.height = main_div_height + 'px';
+      output.style.width = main_div_width + 'px';
+      
+      chart.style.top = (main_div_height - chart_height)  + 'px';
+      chart.style.height = (chart_height - 2) + 'px';
+      chart.style.width = (main_div_width - 2) + 'px';
+      chart.width = main_div_width;
+      chart.height = 100;
+      
+      detector_line.style.top = ((main_div_height - chart_height) + (100 - detector_pos)) + 'px';
+      detector_line.style.height = (0) + 'px';
+      detector_line.style.width = (main_div_width - 2) + 'px';
+      long_lbl.innerHTML = `Long ${m_Long}: `
+      
+      image_canvas.width = main_div_width;
+      image_canvas.height = main_div_height;
+      
+      selector_source.style.top = (main_div_height + 20 )  + 'px';
+      long_div.style.top = (main_div_height + 70 )  + 'px';
+      output.style.top = (main_div_height + 120)  + 'px';
+      
+      square_rect = square.getBoundingClientRect();
+    }
+
+    var l_aDatas = []
+
+    function getLight(left)
+    {
+      var l = left.data;
+      var sum = 0;
+      for (let i = 0; i < l.length; i+=4) 
+        sum += l[i] + l[i + 1] + l[i + 2]
+      var l = (sum / l.length); 
+      return l;
+    }
+
+    var multipl = 255 / (m_Max - m_Min)
+    var rgb_const = (255 / 100);
+
+    function UpdateTrashhold()
+    {
+      stats_lbl.innerHTML = `Min ${m_Min}, Max ${m_Max}. Video source: `
+      detector_line.style.top = ((main_div_height - chart_height) + (100 - detector_pos)) + 'px';
+
+      multipl = 255 / (m_Max - m_Min)
+    }
+
+    function Convert(in_V) //  0 - 8 
+    {
+      var v = (in_V - m_Min) * multipl;
+      return v / rgb_const;
+    }
+
+    var Averager = new function()
+    {
+      var l_aNums = [];
+      var l_aSize = 500;
+      var l_nMax = 0;
+      var l_nMin = 255;
+
+      function UpdateMax()
+      {
+        l_nMax = 0;
+        for(var i = 0; i < l_aNums.length; ++i)
+        {
+          if(l_aNums[i] > l_nMax)
+            l_nMax = l_aNums[i]
+        }
+      }
+
+      function UpdateMin()
+      {
+        l_nMin = 255;
+        for(var i = 0; i < l_aNums.length; ++i)
+        {
+          if(l_aNums[i] < l_nMin)
+            l_nMin = l_aNums[i]
+        }
+      }
+
+      this.Update = function(in_nValue)
+      {
+        in_nValue = Math.round(in_nValue);
+
+        if(5 > (l_nMax - l_nMin))
+            in_nValue += 5;
+
+        if(l_nMax < in_nValue)
+          l_nMax = in_nValue;
+
+        l_aNums.push(in_nValue);
+        
+        if(l_nMin > in_nValue)
+          l_nMin = in_nValue;
+
+        var l_nLeave = l_aNums[0]
+        if(l_aNums.length > l_aSize)
+        {
+          l_aNums.shift();
+
+          if(l_nLeave == l_nMax)
+            UpdateMax()
+          if(l_nLeave == l_nMin)
+            UpdateMin()
+        }
+
+        m_Max = l_nMax;
+        m_Min = l_nMin;
+        UpdateTrashhold();
+      }
+
+    }()
+
+    var Detector = function()
+    {
+      function GetTime()
+      {
+        var d = new Date();
+        return d.getTime();
+      }
+
+      var mline = ""
+      var mstr = ""
+      var m_StartTime = 0;
+      var m_DownTime = 0;
+      return function(in_Value)
+      {
+        var one = in_Value > detector_pos;
+
+        if(one)
+        {
+          if(!m_StartTime)
+          {
+            m_StartTime = GetTime()
+            
+            if(m_DownTime < m_StartTime)
+            {
+              mstr = "\r\n" + mline + mstr
+              mline = "";
+            }
+          }
+        }
+        else
+        {
+          if(m_StartTime)
+          {
+            if(GetTime() - m_StartTime < m_Long)
+            {
+              mline += "0"
+              output.innerHTML = mline + mstr
+            }
+            else
+            {
+              mline += "1"
+              output.innerHTML = mline + mstr
+            }
+
+            m_StartTime = 0;
+            m_DownTime = GetTime() + (1500);
+          }
+        }
+      }
+
+    }();
+
+  
+    function Redrow()
+    {
+      image_canvas_context.drawImage(video, 0, 0, video.videoWidth, video.videoHeight);
+      const imageData = image_canvas_context.getImageData(square_rect.x, square_rect.y, square_rect.width, square_rect.height);
+
+      var l_Value = getLight(imageData)
+      Averager.Update(l_Value)
+      var l_Light = Convert(l_Value)
+      Detector(l_Light);
+      l_aDatas.push(l_Light)
+
+      if(l_aDatas.length > (chart.getBoundingClientRect().width / 10) + 1)
+        l_aDatas.shift();
+
+      cvs.clear();
+      cvs.lines(l_aDatas);
+    }
+
+    video.addEventListener('canplay', (e) => 
+    {
+      InitElements();
+
+      setInterval(Redrow, 10);
+
+    }, false);
+
+    long_lvl.addEventListener('input', (e) => 
+    {
+      m_Long = +e.target.value;
+      long_lbl.innerHTML = `Long ${m_Long}: `
+    }, false);
+
+    var videoElement = video;
+    var videoSelect = document.querySelector('select#videoSource');
+    videoSelect.onchange = getStream;
+
+    getStream().then(getDevices).then(gotDevices);
+
+    function getDevices() {
+      return navigator.mediaDevices.enumerateDevices();
+    }
+
+    function gotDevices(deviceInfos) {
+      window.deviceInfos = deviceInfos; // make available to console
+      console.log('Available input and output devices:', deviceInfos);
+      for (const deviceInfo of deviceInfos) {
+        const option = document.createElement('option');
+        option.value = deviceInfo.deviceId;
+        if (deviceInfo.kind === 'videoinput') {
+          option.text = deviceInfo.label || `Camera ${videoSelect.length + 1}`;
+          videoSelect.appendChild(option);
+        }
+      }
+    }
+
+    function getStream() {
+      if (window.stream) {
+        window.stream.getTracks().forEach(track => {
+          track.stop();
+        });
+      }
+      const videoSource = videoSelect.value;
+      const constraints = {
+        audio: false,
+        video: {deviceId: videoSource ? {exact: videoSource} : undefined}
+      };
+      return navigator.mediaDevices.getUserMedia(constraints).
+        then(gotStream).catch(handleError);
+    }
+
+    function gotStream(stream) {
+      window.stream = stream;
+      videoSelect.selectedIndex = [...videoSelect.options].
+        findIndex(option => option.text === stream.getVideoTracks()[0].label);
+      videoElement.srcObject = stream;
+      videoElement.play();
+    }
+
+    function handleError(error) {
+      console.error('Error: ', error);
+    }
+      
+  </script>
+</html>
+    
